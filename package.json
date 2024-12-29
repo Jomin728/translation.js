@@ -1,0 +1,40 @@
+{
+  "name": "translation",
+  "version": "1.0.0",
+  "description": "Static and Runtime Translation for React",
+  "main": "dist/commonjs/index.js",
+  "bin": {
+    "translatecli": "./bin/cli.js"
+  },
+  "module": "dist/esm/index.js",
+  "types": "./index.d.mts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/commonjs/index.js"
+    }
+  },
+  "keywords": [
+    "translate",
+    "i18next",
+    "internationalization",
+    "i18n",
+    "translation",
+    "localization",
+    "l10n",
+    "globalization",
+    "react",
+    "reactjs"
+  ],
+  "author": "jomin rajesh k <jominrajeshk@gmail.com> https://github.com/Jomin728",
+  "license": "ISC",
+  "dependencies": {
+    "@huggingface/transformers": "^3.2.3",
+    "commander": "^12.1.0",
+    "jscodeshift": "^17.1.1"
+  }
+}

@@ -1,6 +1,10 @@
-const {fork} = require('child_process');
+const {fork, spawn} = require('child_process');
+const {
+  Worker, isMainThread, parentPort, workerData,
+} = require('node:worker_threads');
 const jscodeshift = require(`jscodeshift`);
-const  translate_transformer = require(`./translate_transformer`);
+const {loadModel} = require('./load_transformer')
+// const  translate_transformer = require(`./translate_transformer`);
 const fs = require(`fs`);
 const path = require(`path`);
 const translateGenPath = path.join(__dirname, `../`);
@@ -69,10 +73,18 @@ const deepSearch = (obj,typeArray) => {
     }
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
 const translate = async (languages, dir = translateGenPath,source_lang ) =>
 {
     traverseDir(dir, transform);
     console.log(staticText)
+    console.log('loading model')
+    await loadModel()
+    await sleep(10000)
+    console.log('model loaded')
     saveToFile(staticText, languages)
 
 
@@ -168,11 +180,9 @@ const transform = (filePath,ext)=>{
             }
         })
         jstCallExpression.forEach((path) => {
-            if(functionsCallsToIgnore.includes(path.node.callee.name))
+            if(functionsCallsToIgnore.includes(path.node.callee.name) || functionsCallsToIgnore.includes(path.node.callee.property && path.node.callee.property.name))
             {
-                if(['StringLiteral','Literal'].includes(path.node.arguments[0].type) && typeof path.node.arguments[0].value == 'string' )
-                    deepSearch(path.node.arguments,['StringLiteral','Literal',`TemplateLiteral`])
-                // staticText.delete(path.node.arguments[0].value)
+                    deepSearch(path.node,['StringLiteral','Literal',`TemplateLiteral`])
             }
         })
         jstImportDeclaration.forEach((path) => {
@@ -190,15 +200,62 @@ const transform = (filePath,ext)=>{
 saveToFile = async (staticText, language) => {
   const resources = {}
     const languageTranslationPromises = []
-    language.forEach((lang) => {
-        languageTranslationPromises.push(translate_transformer(resources,staticText,'eng_Latn',lang))
-    })
-  const translations = await Promise.all(languageTranslationPromises)
-  const filePath = path.join(translateGenPath, `public/translation.json`);
+    let processes = spawnMultipleProcesses()
+    await manageChildProcesses(processes,staticText,language,'eng_Latn',resources)
+   console.log('saving to file',resources)
+   const filePath = path.join(translateGenPath, `public/translation.json`);
   let resource_string = JSON.stringify(resources).split('",').join('",\n')
   resource_string = resource_string.split(':{').join(':{\n')
   resource_string = resource_string.split('},').join('},\n')
   fs.writeFileSync(filePath, resource_string, `utf8`);
+}
+
+spawnMultipleProcesses = () => {
+    // const cpus = require('os').cpus().length + 2;
+    const cpus = 2
+    const processes = [];
+    for (let i = 0; i < cpus; i++) {
+      console.log('spawning child process');
+      const child = new Worker('./translate-gen/translate_transformer.js');
+      processes.push(child);
+    }
+    return processes
+}
+
+manageChildProcesses = async (processes, staticText, languages,src_lang,resources) => {
+    const staticTextArray = Array.from(staticText)
+    const chunkSize = Math.ceil(staticTextArray.length / processes.length);
+    let languageTranslationPromises = []
+    for(let i=0;i<languages.length;i++)
+    {
+        const lang = languages[i]
+        let exit = false
+        if(i == languages.length - 1)
+            exit = true
+
+        resources[lang] = await createPromise(processes,staticTextArray,chunkSize,lang,src_lang,resources[lang],exit)
+    }
+}
+
+createPromise = (processes, staticTextArray,chunkSize,lang,src_lang,resource,exit) => {
+    return new Promise((resolve,reject) => {
+        let exitcount = 0;
+        for (let i = 0; i < processes.length; i++) {
+            const chunk = staticTextArray.slice(i * chunkSize, (i + 1) * chunkSize);
+            const child = processes[i];
+            child.postMessage({ chunk, lang, src_lang, exit });
+            child.on('message', (message) => {
+              resource = {...resource,...message}
+              console.log(resource)
+              exitcount++;
+              if (exitcount === processes.length) {
+                resolve(resource);
+              }
+            });
+            child.on('exit', () => {
+            });
+          }
+    })
 }
 
 module.exports = { translate };

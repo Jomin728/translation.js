@@ -3,7 +3,7 @@ const {
   Worker, isMainThread, parentPort, workerData,
 } = require('node:worker_threads');
 const jscodeshift = require(`jscodeshift`);
-const {loadModel} = require('./load_transformer')
+const {loadModel,loadAutoModelT5,loadModelM2M} = require('./load_transformer')
 // const  translate_transformer = require(`./translate_transformer`);
 const fs = require(`fs`);
 const path = require(`path`);
@@ -76,13 +76,15 @@ const deepSearch = (obj,typeArray) => {
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
-  
+let translator = null
 const translate = async (languages, dir = translateGenPath,source_lang ) =>
 {
     traverseDir(dir, transform);
     console.log(staticText)
     console.log('loading model')
-    await loadModel()
+    // await loadModel()
+    // await loadAutoModelT5();
+    // translator = await loadModelM2M()
     await sleep(10000)
     console.log('model loaded')
     saveToFile(staticText, languages)
@@ -212,7 +214,7 @@ saveToFile = async (staticText, language) => {
 
 spawnMultipleProcesses = () => {
     // const cpus = require('os').cpus().length + 2;
-    const cpus = 2
+    const cpus = 1
     const processes = [];
     for (let i = 0; i < cpus; i++) {
       console.log('spawning child process');
